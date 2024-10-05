@@ -13,8 +13,8 @@ const Vec = struct {
         return Vec{ .x = a.x - b.x, .y = a.y - b.y, .z = a.z - b.z };
     }
 
-    fn mul(a: Vec, b: Vec) Vec {
-        return Vec{ .x = a.x * b.x, .y = a.y * b.y, .z = a.z * b.z };
+    fn mul(a: Vec, b: f32) Vec {
+        return Vec{ .x = a.x * b, .y = a.y * b, .z = a.z * b };
     }
 
     fn dot(a: Vec, b: Vec) f32 {
@@ -26,12 +26,7 @@ const Vec = struct {
     }
 
     fn normalize(v: Vec) Vec {
-        const f = (1.0 / v.length());
-        return Vec{
-            .x = v.x * f,
-            .y = v.y * f,
-            .z = v.z * f,
-        };
+        return v.mul(1.0 / v.length());
     }
 };
 
@@ -47,6 +42,9 @@ const Sphere = struct {
     fn intersect(s: Sphere, origin: Vec, direction: Vec) f32 {
         const l = s.center.sub(origin);
         const t_ca = l.dot(direction);
+        if (t_ca < 0.0) {
+            return std.math.nan(f32);
+        }
         // d^2 + t_ca^2 = l^2
         const d2 = l.dot(l) - (t_ca * t_ca);
         if (d2 > (s.radius * s.radius)) {
@@ -80,7 +78,7 @@ const World = struct {
     lights: []const Sphere,
 };
 
-fn trace(world: World, origin: Vec, direction: Vec) !f32 {
+fn trace(world: World, origin: Vec, direction: Vec) f32 {
     var index: isize = -1;
     var distance: f32 = std.math.nan(f32);
 
@@ -95,11 +93,37 @@ fn trace(world: World, origin: Vec, direction: Vec) !f32 {
     }
 
     if (index < 0) {
-        return 0; // black
+        //return 1.0 - direction.y; // black
+        return 0.0; // black
     }
 
-    // white
-    return world.spheres[@intCast(index)].color;
+    // p is the hit point of ray from camera to sphere surface
+    const p = origin.add(direction.mul(distance));
+    const n = p.sub(world.spheres[@intCast(index)].center).normalize();
+    var c = world.spheres[@intCast(index)].color * 0.1;
+
+    for (world.lights) |light| {
+        const l = light.center.sub(p).normalize();
+        var shadow = false;
+
+        for (world.spheres) |sphere| {
+            if (!std.math.isNan(sphere.intersect(p, l))) {
+                shadow = true;
+                break;
+            }
+        }
+
+        if (!shadow) {
+            const diffuse = @max(0.0, (l.dot(n) * 0.7));
+            const specular = std.math.pow(f32, @max(0.0, l.dot(n)), 70.0) * 0.4;
+            // Try
+            // return world.spheres[@intCast(index)].color;
+            // Or
+            c = c + world.spheres[@intCast(index)].color * light.color * diffuse + specular;
+        }
+    }
+
+    return c;
 }
 
 fn render(world: World, width: isize, height: isize) !void {
@@ -112,9 +136,9 @@ fn render(world: World, width: isize, height: isize) !void {
                 .z = @as(f32, @floatFromInt(-height)),
             }).normalize();
             // get color of the pixel
-            const c = try trace(world, (Vec{ .x = 0.0, .y = 1.0, .z = 5.0 }), direction);
+            const c = trace(world, (Vec{ .x = 0.0, .y = 1.0, .z = 5.0 }), direction);
             // find the suitable ASCII symbol
-            const pixel = " .:-=+*#%@$"[@as(usize, @intFromFloat(c * 10))];
+            const pixel = " .:-=+*#%@$"[@max(@min(@as(usize, @intFromFloat(c * 10)), 10), 0)];
             try stdout.print("{c}{c}", .{ pixel, pixel });
         }
         try stdout.print("\n", .{});
