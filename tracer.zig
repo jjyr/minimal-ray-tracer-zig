@@ -93,8 +93,8 @@ fn trace(world: World, origin: Vec, direction: Vec) f32 {
     }
 
     if (index < 0) {
-        //return 1.0 - direction.y; // black
-        return 0.0; // black
+        return 1.0 - direction.y; // return gray sky
+        // return 0.0; // black
     }
 
     // p is the hit point of ray from camera to sphere surface
@@ -126,7 +126,7 @@ fn trace(world: World, origin: Vec, direction: Vec) f32 {
     return c;
 }
 
-fn render(world: World, width: isize, height: isize) !void {
+fn render_terminal(world: World, width: isize, height: isize) !void {
     const stdout = std.io.getStdOut().writer();
     for (0..@intCast(height)) |y| {
         for (0..@intCast(width)) |x| {
@@ -143,6 +143,31 @@ fn render(world: World, width: isize, height: isize) !void {
         }
         try stdout.print("\n", .{});
     }
+}
+
+fn render_pgm(world: World, filename: []const u8, width: isize, height: isize) !void {
+    const dir = std.fs.cwd();
+    const file = try dir.createFile(filename, .{});
+    defer file.close();
+    var buffer = std.io.bufferedWriter(file.writer());
+    const writer = buffer.writer();
+
+    try writer.print("P2\n{d} {d} 255\n", .{ width, height });
+
+    for (0..@intCast(height)) |y| {
+        for (0..@intCast(width)) |x| {
+            const direction = (Vec{
+                .x = @as(f32, @floatFromInt(x)) - @as(f32, @floatFromInt(width)) / 2.0,
+                .y = @as(f32, @floatFromInt(height)) / 2.0 - @as(f32, @floatFromInt(y)),
+                .z = @as(f32, @floatFromInt(-height)),
+            }).normalize();
+            const c = trace(world, (Vec{ .x = 0.0, .y = 1.0, .z = 5.0 }), direction);
+            const b: u8 = @truncate(@as(u32, @intFromFloat(c * 255.0)));
+            try writer.print("{d} ", .{b});
+        }
+    }
+
+    try buffer.flush();
 }
 
 pub fn main() !void {
@@ -218,5 +243,6 @@ pub fn main() !void {
         .lights = &lights,
     };
 
-    try render(world, 40, 25);
+    try render_pgm(world, "./tracer.pgm", 800, 600);
+    try render_terminal(world, 40, 25);
 }
