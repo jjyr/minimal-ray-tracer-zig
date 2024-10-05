@@ -47,12 +47,9 @@ const Sphere = struct {
     fn intersect(s: Sphere, origin: Vec, direction: Vec) f32 {
         const l = s.center.sub(origin);
         const t_ca = l.dot(direction);
-        if (t_ca < 0.0) {
-            return std.math.nan(f32);
-        }
         // d^2 + t_ca^2 = l^2
         const d2 = l.dot(l) - (t_ca * t_ca);
-        if (d2 < 0.0) {
+        if (d2 > (s.radius * s.radius)) {
             return std.math.nan(f32);
         }
         // d^2 + t_hc^2 = radius^2
@@ -74,7 +71,7 @@ const Sphere = struct {
             }
         }
 
-        return t1 - t0;
+        return t0;
     }
 };
 
